@@ -26,10 +26,6 @@
 
         </android.support.design.widget.AppBarLayout>
 
-    <!--
-        <include layout="@layout/map_fragment" />
-    -->
-
         <FrameLayout
             android:id="@+id/map_fragment_container"
             android:layout_width="match_parent"

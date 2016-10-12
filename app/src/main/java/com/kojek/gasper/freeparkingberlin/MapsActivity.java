@@ -1,49 +1,58 @@
 package com.kojek.gasper.freeparkingberlin;
 
+import android.graphics.Point;
+import android.graphics.drawable.shapes.Shape;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
+import android.view.MotionEvent;
+import android.view.View;
 import android.widget.Toast;
 
-import com.google.android.gms.maps.CameraUpdate;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
+import com.google.android.gms.maps.Projection;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
-import com.google.android.gms.maps.model.PolygonOptions;
-import com.google.firebase.messaging.SendException;
+import com.google.android.gms.maps.model.Marker;
+import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.Polygon;
 import com.google.maps.android.geojson.GeoJsonFeature;
 import com.google.maps.android.geojson.GeoJsonLayer;
+import com.google.maps.android.geojson.GeoJsonPoint;
 import com.google.maps.android.geojson.GeoJsonPolygon;
 import com.google.maps.android.geojson.GeoJsonPolygonStyle;
 
 import org.json.JSONException;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
+
 
 public class MapsActivity extends AppCompatActivity{
     static final private String TAG = "MapsActivity";
     private GoogleMap mMap;
-    MapsActivity instace;
+    private GeoJsonLayer zoneLayer;
+    private LatLng touchLatLng;
+    MapsActivity instance;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        instace = this;
+        instance = this;
         setContentView(R.layout.activity_maps);
 
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
+        setupMap();
+    }
+
+    private void setupMap() {
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
-//        SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
-//                .findFragmentById(R.id.map);
-        final SupportMapFragment mapFragment = new SupportMapFragment();
+        final SupportMapFragment mapFragment = new MySupportMapFragment();
 
         mapFragment.getMapAsync(new OnMapReadyCallback() {
             @Override
@@ -62,29 +71,18 @@ public class MapsActivity extends AppCompatActivity{
                 }
 
                 // Draw the zones
-//                HashMap<Integer, Zone> zones = new Zones().getZones();
-//                for (Map.Entry<Integer, Zone> entry : zones.entrySet()) {
-//                    Integer key = entry.getKey();
-//                    Zone zone = entry.getValue();
-//                    mMap.addPolygon(new PolygonOptions()
-//                            .addAll(zone.getPoints())
-//                            .strokeColor(0xFFffff00)
-//                            .fillColor(0x22ffff00)
-//                            .strokeWidth(4)
-//                    );
-//                }
                 try {
-                    GeoJsonLayer layer = new GeoJsonLayer(mMap, R.raw.berlin_zones, instace);
-                    GeoJsonPolygonStyle style = layer.getDefaultPolygonStyle();
+                    zoneLayer = new GeoJsonLayer(mMap, R.raw.berlin_zones, instance);
+                    GeoJsonPolygonStyle style = zoneLayer.getDefaultPolygonStyle();
                     style.setFillColor(0x22ea6464);
                     style.setStrokeColor(0xFFff0000);
                     style.setStrokeWidth(4);
-                    layer.addLayerToMap();
-                    layer.setOnFeatureClickListener(new GeoJsonLayer.GeoJsonOnFeatureClickListener() {
+                    zoneLayer.addLayerToMap();
+                    zoneLayer.setOnFeatureClickListener(new GeoJsonLayer.GeoJsonOnFeatureClickListener() {
                         @Override
                         public void onFeatureClick(GeoJsonFeature feature) {
                             Log.d(TAG, "Zone clicked: " + feature.getProperty("zone"));
-                            Toast.makeText(instace,
+                            Toast.makeText(instance,
                                     "Zone clicked: " + feature.getProperty("zone"),
                                     Toast.LENGTH_SHORT).show();
 
@@ -96,6 +94,8 @@ public class MapsActivity extends AppCompatActivity{
                     Log.e(TAG, "GeoJSON file could not be converted to a JSONObject");
                 }
 
+
+
                 // Move the camera to overview of Berlin
                 LatLng berlin = new LatLng(52.5172, 13.3887);
                 CameraPosition cameraPosition = new CameraPosition.Builder()
@@ -104,6 +104,12 @@ public class MapsActivity extends AppCompatActivity{
                         .newCameraPosition(cameraPosition));
 
                 //Listeners
+                mMap.setOnMapClickListener(new GoogleMap.OnMapClickListener() {
+                    @Override
+                    public void onMapClick(LatLng latLng) {
+                        Log.d(TAG, "onMapClick, loc: " + latLng);
+                    }
+                });
                 mMap.setOnMapLongClickListener(new GoogleMap.OnMapLongClickListener() {
                     @Override
                     public void onMapLongClick(LatLng latLng) {
@@ -137,9 +143,17 @@ public class MapsActivity extends AppCompatActivity{
 
             }
         });
+
+        // Show the map fragment
         getSupportFragmentManager().beginTransaction()
                 .add(R.id.map_fragment_container, mapFragment)
                 .commit();
     }
 
+    public void tapEvent(int x, int y) {
+        Projection pp = mMap.getProjection();
+        touchLatLng = pp.fromScreenLocation(new Point(x, y));
+
+        Log.d(TAG,String.format("tap event x=%d y=%d ",x,y) + touchLatLng);
+    }
 }
