@@ -1,25 +1,42 @@
 package com.kojek.gasper.freeparkingberlin;
 
+import android.content.Context;
+import android.content.Intent;
+import android.graphics.Color;
 import android.graphics.Point;
+import android.graphics.Typeface;
 import android.graphics.drawable.shapes.Shape;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.SystemClock;
+import android.support.annotation.NonNull;
+import android.support.design.widget.BottomSheetBehavior;
+import android.support.design.widget.FloatingActionButton;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
+import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.GoogleMapOptions;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.Projection;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.BitmapDescriptor;
 import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.Polygon;
+import com.google.maps.android.PolyUtil;
 import com.google.maps.android.geojson.GeoJsonFeature;
 import com.google.maps.android.geojson.GeoJsonLayer;
 import com.google.maps.android.geojson.GeoJsonPoint;
@@ -29,6 +46,12 @@ import com.google.maps.android.geojson.GeoJsonPolygonStyle;
 import org.json.JSONException;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.ListIterator;
 
 
 public class MapsActivity extends AppCompatActivity{
@@ -36,7 +59,16 @@ public class MapsActivity extends AppCompatActivity{
     private GoogleMap mMap;
     private GeoJsonLayer zoneLayer;
     private LatLng touchLatLng;
+    private Marker marker;
+    private GeoJsonFeature lastFeature;
     MapsActivity instance;
+    private MySupportMapFragment mapFragment;
+
+    private BottomSheetBehavior bottomSheetBehavior;
+    private TextView bottomSheetTitle;
+    private TextView bottomSheetText;
+    private FloatingActionButton maps;
+    private FloatingActionButton navigate;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -47,13 +79,72 @@ public class MapsActivity extends AppCompatActivity{
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
+        initViews();
+        initListeners();
+
         setupMap();
+
+        bottomSheetBehavior.setHideable(true);
+        bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
+    }
+
+    private void initViews() {
+        bottomSheetBehavior = BottomSheetBehavior.from(findViewById(R.id.bottomSheetLayout));
+        bottomSheetTitle = (TextView) findViewById(R.id.bottomSheetTitle);
+        bottomSheetText = (TextView) findViewById(R.id.bottomSheetText);
+        maps = (FloatingActionButton) findViewById(R.id.fab_maps);
+        navigate = (FloatingActionButton) findViewById(R.id.fab_navigate);
+
+        if (android.os.Build.VERSION.SDK_INT >= 21) {
+            try {
+                findViewById(R.id.bottomSheetLayout).setElevation(10);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private void initListeners() {
+        bottomSheetBehavior.setBottomSheetCallback(new BottomSheetBehavior.BottomSheetCallback() {
+            @Override
+            public void onStateChanged(@NonNull View bottomSheet, int newState) {
+
+            }
+
+            @Override
+            public void onSlide(@NonNull View bottomSheet, float slideOffset) {
+
+            }
+        });
+        maps.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String loc = marker.getPosition().latitude + ", " + marker.getPosition().longitude;
+                Log.d(TAG, "Go to maps, location: " + loc);
+                Uri gmmIntentUri = Uri.parse("geo:0,0?q=" + loc + "(Park)");
+                Intent mapIntent = new Intent(Intent.ACTION_VIEW, gmmIntentUri);
+                mapIntent.setPackage("com.google.android.apps.maps");
+                startActivity(mapIntent);
+            }
+        });
+        navigate.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String loc = marker.getPosition().latitude + ", " + marker.getPosition().longitude;
+                Log.d(TAG, "Navigate to location: " + loc);
+                Uri gmmIntentUri = Uri.parse("google.navigation:q=" + loc);
+                Intent mapIntent = new Intent(Intent.ACTION_VIEW, gmmIntentUri);
+                mapIntent.setPackage("com.google.android.apps.maps");
+                startActivity(mapIntent);
+            }
+        });
+
     }
 
     private void setupMap() {
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
-        final SupportMapFragment mapFragment = new MySupportMapFragment();
-
+//        final SupportMapFragment mapFragment = new MySupportMapFragment().newInstance(new GoogleMapOptions().liteMode(true));
+        mapFragment = new MySupportMapFragment();
         mapFragment.getMapAsync(new OnMapReadyCallback() {
             @Override
             public void onMapReady(GoogleMap googleMap) {
@@ -61,7 +152,7 @@ public class MapsActivity extends AppCompatActivity{
                 mMap.getUiSettings().setCompassEnabled(true);
                 mMap.getUiSettings().setMapToolbarEnabled(false);
                 mMap.getUiSettings().setMyLocationButtonEnabled(true);
-                mMap.getUiSettings().setZoomControlsEnabled(true);
+                mMap.getUiSettings().setZoomControlsEnabled(false);
                 mMap.getUiSettings().setAllGesturesEnabled(true);
 
                 try {
@@ -81,10 +172,20 @@ public class MapsActivity extends AppCompatActivity{
                     zoneLayer.setOnFeatureClickListener(new GeoJsonLayer.GeoJsonOnFeatureClickListener() {
                         @Override
                         public void onFeatureClick(GeoJsonFeature feature) {
-                            Log.d(TAG, "Zone clicked: " + feature.getProperty("zone"));
-                            Toast.makeText(instance,
-                                    "Zone clicked: " + feature.getProperty("zone"),
-                                    Toast.LENGTH_SHORT).show();
+                            try {
+                                Log.d(TAG, "Zone clicked: " + feature.getProperty("zone"));
+//                                Toast.makeText(instance, "Zone clicked: " + feature.getProperty("zone"), Toast.LENGTH_SHORT).show();
+                                if (marker != null) marker.remove();
+                                marker = mMap.addMarker(new MarkerOptions()
+                                        .alpha(1)
+                                        .position(touchLatLng)
+                                );
+                                String title = getString(R.string.zone) + " " +  feature.getProperty("zone");
+                                bottomSheetTitle.setText(title);
+                                bottomSheetBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
+                            } catch (Exception e) {
+                                Log.e(TAG, e.getLocalizedMessage());
+                            }
 
                         }
                     });
@@ -104,10 +205,24 @@ public class MapsActivity extends AppCompatActivity{
                         .newCameraPosition(cameraPosition));
 
                 //Listeners
+                mMap.setOnInfoWindowClickListener(new GoogleMap.OnInfoWindowClickListener() {
+                    @Override
+                    public void onInfoWindowClick(Marker marker) {
+
+                    }
+                });
                 mMap.setOnMapClickListener(new GoogleMap.OnMapClickListener() {
                     @Override
                     public void onMapClick(LatLng latLng) {
                         Log.d(TAG, "onMapClick, loc: " + latLng);
+                        if (marker != null) marker.remove();
+                        marker = mMap.addMarker(new MarkerOptions()
+                                .alpha(1)
+                                .position(latLng)
+                        );
+                        lastFeature = null;
+                        bottomSheetTitle.setText(R.string.zone_free);
+                        bottomSheetBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
                     }
                 });
                 mMap.setOnMapLongClickListener(new GoogleMap.OnMapLongClickListener() {
@@ -153,7 +268,8 @@ public class MapsActivity extends AppCompatActivity{
     public void tapEvent(int x, int y) {
         Projection pp = mMap.getProjection();
         touchLatLng = pp.fromScreenLocation(new Point(x, y));
-
         Log.d(TAG,String.format("tap event x=%d y=%d ",x,y) + touchLatLng);
     }
+
+
 }

@@ -8,6 +8,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
+import com.google.android.gms.maps.GoogleMapOptions;
+import com.google.android.gms.maps.MapFragment;
 import com.google.android.gms.maps.SupportMapFragment;
 
 /**
@@ -24,11 +26,14 @@ public class MySupportMapFragment extends SupportMapFragment {
         mActivity = (MapsActivity) getActivity();
     }
 
+    public static SupportMapFragment newInstance(GoogleMapOptions googleMapOptions) {
+        return SupportMapFragment.newInstance(googleMapOptions);
+    }
+
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup parent,
                              Bundle savedInstanceState) {
-        mOriginalContentView = super.onCreateView(inflater, parent,
-                savedInstanceState);
+        mOriginalContentView = super.onCreateView(inflater, parent, savedInstanceState);
         mTouchView = new TouchableWrapper();
         mTouchView.addView(mOriginalContentView);
         return mTouchView;
@@ -37,6 +42,10 @@ public class MySupportMapFragment extends SupportMapFragment {
     @Override
     public View getView() {
         return mOriginalContentView;
+    }
+
+    public View getTouchView() {
+        return mTouchView;
     }
 
     class TouchableWrapper extends FrameLayout {
@@ -49,8 +58,10 @@ public class MySupportMapFragment extends SupportMapFragment {
         public boolean dispatchTouchEvent(MotionEvent event) {
             switch (event.getAction()) {
                 case MotionEvent.ACTION_DOWN:
+//                    Log.d("ACTION_DOWN", "metastate: " + event.getMetaState());
                     break;
                 case MotionEvent.ACTION_UP: {
+//                    Log.d("ACTION_UP", "metastate: " + event.getMetaState());
                     int x = (int) event.getX();
                     int y = (int) event.getY();
                     mActivity.tapEvent(x,y);

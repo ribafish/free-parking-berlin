@@ -1,4 +1,7 @@
 <resources>
     <string name="app_name">Kostenlos Parkplatz Berlin</string>
     <string name="title_activity_maps">Kostenlos Parkplatz Berlin</string>
+    <string name="navigate_to">Navigate to</string>
+    <string name="zone">Zone</string>
+    <string name="zone_free">Free zone</string>
 </resources>
