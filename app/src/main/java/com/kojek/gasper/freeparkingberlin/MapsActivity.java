@@ -6,6 +6,8 @@ import android.graphics.Color;
 import android.graphics.Point;
 import android.graphics.Typeface;
 import android.graphics.drawable.shapes.Shape;
+import android.location.Address;
+import android.location.Geocoder;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -16,7 +18,10 @@ import android.support.design.widget.FloatingActionButton;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
+import android.view.ContextMenu;
 import android.view.Gravity;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Button;
@@ -24,6 +29,8 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.arlib.floatingsearchview.FloatingSearchView;
+import com.arlib.floatingsearchview.suggestions.model.SearchSuggestion;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.GoogleMapOptions;
@@ -42,16 +49,13 @@ import com.google.maps.android.geojson.GeoJsonLayer;
 import com.google.maps.android.geojson.GeoJsonPoint;
 import com.google.maps.android.geojson.GeoJsonPolygon;
 import com.google.maps.android.geojson.GeoJsonPolygonStyle;
+import com.kojek.gasper.freeparkingberlin.util.StringSuggestion;
 
 import org.json.JSONException;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
-import java.util.ListIterator;
 
 
 public class MapsActivity extends AppCompatActivity{
@@ -60,7 +64,6 @@ public class MapsActivity extends AppCompatActivity{
     private GeoJsonLayer zoneLayer;
     private LatLng touchLatLng;
     private Marker marker;
-    private GeoJsonFeature lastFeature;
     MapsActivity instance;
     private MySupportMapFragment mapFragment;
 
@@ -70,22 +73,29 @@ public class MapsActivity extends AppCompatActivity{
     private FloatingActionButton maps;
     private FloatingActionButton navigate;
 
+    private FloatingSearchView floatingSearchView;
+    private Geocoder geocoder;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         instance = this;
         setContentView(R.layout.activity_maps);
 
-        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
-        setSupportActionBar(toolbar);
+//        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
+//        setSupportActionBar(toolbar);
 
         initViews();
         initListeners();
 
         setupMap();
 
+        setupFloatingSearch();
+
         bottomSheetBehavior.setHideable(true);
         bottomSheetBehavior.setState(BottomSheetBehavior.STATE_HIDDEN);
+
+        geocoder = new Geocoder(this);
     }
 
     private void initViews() {
@@ -94,6 +104,7 @@ public class MapsActivity extends AppCompatActivity{
         bottomSheetText = (TextView) findViewById(R.id.bottomSheetText);
         maps = (FloatingActionButton) findViewById(R.id.fab_maps);
         navigate = (FloatingActionButton) findViewById(R.id.fab_navigate);
+        floatingSearchView = (FloatingSearchView) findViewById(R.id.floating_search_view);
 
         if (android.os.Build.VERSION.SDK_INT >= 21) {
             try {
@@ -149,9 +160,9 @@ public class MapsActivity extends AppCompatActivity{
             @Override
             public void onMapReady(GoogleMap googleMap) {
                 mMap = googleMap;
-                mMap.getUiSettings().setCompassEnabled(true);
+                mMap.getUiSettings().setCompassEnabled(false);
                 mMap.getUiSettings().setMapToolbarEnabled(false);
-                mMap.getUiSettings().setMyLocationButtonEnabled(true);
+                mMap.getUiSettings().setMyLocationButtonEnabled(false);
                 mMap.getUiSettings().setZoomControlsEnabled(false);
                 mMap.getUiSettings().setAllGesturesEnabled(true);
 
@@ -174,15 +185,7 @@ public class MapsActivity extends AppCompatActivity{
                         public void onFeatureClick(GeoJsonFeature feature) {
                             try {
                                 Log.d(TAG, "Zone clicked: " + feature.getProperty("zone"));
-//                                Toast.makeText(instance, "Zone clicked: " + feature.getProperty("zone"), Toast.LENGTH_SHORT).show();
-                                if (marker != null) marker.remove();
-                                marker = mMap.addMarker(new MarkerOptions()
-                                        .alpha(1)
-                                        .position(touchLatLng)
-                                );
-                                String title = getString(R.string.zone) + " " +  feature.getProperty("zone");
-                                bottomSheetTitle.setText(title);
-                                bottomSheetBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
+                                dropMarker(feature);
                             } catch (Exception e) {
                                 Log.e(TAG, e.getLocalizedMessage());
                             }
@@ -205,24 +208,11 @@ public class MapsActivity extends AppCompatActivity{
                         .newCameraPosition(cameraPosition));
 
                 //Listeners
-                mMap.setOnInfoWindowClickListener(new GoogleMap.OnInfoWindowClickListener() {
-                    @Override
-                    public void onInfoWindowClick(Marker marker) {
-
-                    }
-                });
                 mMap.setOnMapClickListener(new GoogleMap.OnMapClickListener() {
                     @Override
                     public void onMapClick(LatLng latLng) {
                         Log.d(TAG, "onMapClick, loc: " + latLng);
-                        if (marker != null) marker.remove();
-                        marker = mMap.addMarker(new MarkerOptions()
-                                .alpha(1)
-                                .position(latLng)
-                        );
-                        lastFeature = null;
-                        bottomSheetTitle.setText(R.string.zone_free);
-                        bottomSheetBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
+                        dropMarker(latLng);
                     }
                 });
                 mMap.setOnMapLongClickListener(new GoogleMap.OnMapLongClickListener() {
@@ -231,27 +221,14 @@ public class MapsActivity extends AppCompatActivity{
                         Log.d(TAG, "onMapLongClick, loc: " + latLng);
                     }
                 });
-                mMap.setOnMyLocationButtonClickListener(new GoogleMap.OnMyLocationButtonClickListener() {
-                    @Override
-                    public boolean onMyLocationButtonClick() {
-                        Log.d(TAG, "onMyLocationButtonClick");
-                        mMap.getUiSettings().setMyLocationButtonEnabled(false);
-
-                        // Move to user and ALWAYS zoom
-                        if (mMap.getCameraPosition().zoom < 17) {
-                            CameraPosition cameraPosition = new CameraPosition.Builder().target(mMap.getCameraPosition().target).zoom(17).build();  //TODO
-                            mMap.animateCamera(CameraUpdateFactory
-                                    .newCameraPosition(cameraPosition));
-                        }
-                        return true;
-                    }
-                });
                 mMap.setOnCameraMoveStartedListener(new GoogleMap.OnCameraMoveStartedListener() {
                     @Override
                     public void onCameraMoveStarted(int i) {
 //                        Log.d(TAG, "onCameraMoveStarted, reason: " + i);
                         if (i == 1){    // if moved by user
-                            mMap.getUiSettings().setMyLocationButtonEnabled(true);  //enable go to my loc button
+//                            mMap.getUiSettings().setMyLocationButtonEnabled(true);  //enable go to my loc button
+//                            Menu menu = ;
+                            //TODO
                         }
                     }
                 });
@@ -265,11 +242,175 @@ public class MapsActivity extends AppCompatActivity{
                 .commit();
     }
 
+    private void setupFloatingSearch() {
+        floatingSearchView.setOnQueryChangeListener(new FloatingSearchView.OnQueryChangeListener() {
+            @Override
+            public void onSearchTextChanged(String oldQuery, String newQuery) {
+                if (!oldQuery.equals("") && newQuery.equals("")) {
+                    floatingSearchView.clearSuggestions();
+                } else {
+                    // TODO: do it asynchronously
+                    try {
+                        List<Address> addresses = geocoder.getFromLocationName(newQuery, 5);
+                        List<StringSuggestion> suggestions = new LinkedList<>();
+                        for (Address address : addresses) {
+                            suggestions.add(new StringSuggestion(address));
+                        }
+                        floatingSearchView.swapSuggestions(suggestions);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        });
+        floatingSearchView.setOnSearchListener(new FloatingSearchView.OnSearchListener() {
+            @Override
+            public void onSuggestionClicked(SearchSuggestion searchSuggestion) {
+                dropMarker((StringSuggestion) searchSuggestion);
+            }
+
+            @Override
+            public void onSearchAction(String s) {
+                dropMarker(s);
+            }
+        });
+        floatingSearchView.setOnMenuItemClickListener(new FloatingSearchView.OnMenuItemClickListener() {
+            @Override
+            public void onActionMenuItemSelected(MenuItem menuItem) {
+                Log.d(TAG, "FloatingSearch item " + menuItem.getTitle());
+                switch (menuItem.getItemId()) {
+                    case R.id.action_my_location:
+                        if (mMap.getCameraPosition().zoom < 17) {
+                            CameraPosition cameraPosition = new CameraPosition.Builder()
+                                    .target(mMap.getCameraPosition().target)
+                                    .tilt(mMap.getCameraPosition().tilt)
+                                    .zoom(16)
+                                    .bearing(mMap.getCameraPosition().bearing)
+                                    .build();  //TODO: follow location
+                            mMap.animateCamera(CameraUpdateFactory
+                                    .newCameraPosition(cameraPosition));
+                        }
+                        break;
+                    case R.id.action_north_up:
+                        if (mMap.getCameraPosition().bearing != 0) {
+                            CameraPosition cameraPosition = new CameraPosition.Builder()
+                                    .target(mMap.getCameraPosition().target)
+                                    .tilt(mMap.getCameraPosition().tilt)
+                                    .zoom(mMap.getCameraPosition().zoom)
+                                    .bearing(0)
+                                    .build();
+                            mMap.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition));
+                        } else { // follow compass bearing
+                            //TODO: follow compass bearing
+                        }
+                        break;
+                    case R.id.action_settings:
+
+                        break;
+                }
+            }
+        });
+    }
+
     public void tapEvent(int x, int y) {
         Projection pp = mMap.getProjection();
         touchLatLng = pp.fromScreenLocation(new Point(x, y));
         Log.d(TAG,String.format("tap event x=%d y=%d ",x,y) + touchLatLng);
     }
 
+    private LatLng getLocationFromAddress(String strAddress) {
+        //TODO: do it asynchronously
+
+        Geocoder coder = new Geocoder(instance);
+        List<Address> address;
+        LatLng p1 = null;
+
+        try {
+            address = coder.getFromLocationName(strAddress, 5);
+            if (address == null) {
+                return null;
+            }
+            Address location = address.get(0);
+            location.getLatitude();
+            location.getLongitude();
+
+            p1 = new LatLng(location.getLatitude(), location.getLongitude() );
+
+        } catch (Exception ex) {
+
+            ex.printStackTrace();
+        }
+
+        return p1;
+    }
+
+    private void moveCameraToMarker() {
+        CameraPosition cameraPosition = new CameraPosition.Builder()
+                .target(marker.getPosition())
+                .tilt(mMap.getCameraPosition().tilt)
+                .zoom(16)
+                .bearing(mMap.getCameraPosition().bearing)
+                .build();
+        mMap.animateCamera(CameraUpdateFactory
+                .newCameraPosition(cameraPosition));
+    }
+
+    private void dropMarker(LatLng latLng) {
+        if (marker != null) marker.remove();
+        marker = mMap.addMarker(new MarkerOptions()
+                .alpha(1)
+                .position(latLng)
+        );
+        bottomSheetTitle.setText(R.string.zone_free);
+        bottomSheetBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
+        // TODO: find nearest address asynchronously
+    }
+
+    private void dropMarker(GeoJsonFeature feature) throws Exception {
+        if (marker != null) marker.remove();
+        marker = mMap.addMarker(new MarkerOptions()
+                .alpha(1)
+                .position(touchLatLng)
+        );
+        String title = getString(R.string.zone) + " " +  feature.getProperty("zone");
+        bottomSheetTitle.setText(title);
+        bottomSheetBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
+        // TODO: find nearest address asynchronously
+    }
+
+    private void dropMarker(StringSuggestion stringSuggestion) {
+        LatLng latLng = stringSuggestion.getLatLng();
+        if (latLng == null) {
+            dropMarker(stringSuggestion.getBody());
+        } else {
+            if (marker != null) marker.remove();
+            marker = mMap.addMarker(new MarkerOptions()
+                    .alpha(1)
+                    .position(latLng)
+            );
+            // TODO: check if in zone
+            String title = getString(R.string.zone) + " TODO";
+            bottomSheetTitle.setText(title);
+            bottomSheetText.setText(stringSuggestion.getBody());
+            bottomSheetBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
+            moveCameraToMarker();
+        }
+    }
+
+    private void dropMarker(String address) {
+        LatLng latLng = getLocationFromAddress(address);
+
+        if (marker != null) marker.remove();
+        marker = mMap.addMarker(new MarkerOptions()
+                .alpha(1)
+                .position(latLng)
+        );
+        // TODO: check if in zone
+        String title = getString(R.string.zone) + " TODO";
+        bottomSheetTitle.setText(title);
+        bottomSheetText.setText(address);
+        bottomSheetBehavior.setState(BottomSheetBehavior.STATE_COLLAPSED);
+        moveCameraToMarker();
+    }
 
 }

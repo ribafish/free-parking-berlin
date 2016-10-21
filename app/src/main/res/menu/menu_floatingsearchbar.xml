@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools" tools:context=".MapsActivity">
+    <item android:id="@+id/action_north_up"
+        android:title="@string/north_up"
+        android:orderInCategory="1"
+        app:showAsAction="ifRoom"
+        android:icon="@drawable/ic_explore_black_24dp"/>
+
+    <item android:id="@+id/action_my_location"
+        android:title="@string/my_location"
+        android:orderInCategory="2"
+        app:showAsAction="ifRoom"
+        android:icon="@drawable/ic_my_location_black_24dp"/>
+
+    <item android:id="@+id/action_settings"
+        android:title="@string/settings"
+        android:orderInCategory="3"
+        android:icon="@drawable/ic_settings_black_24dp"
+        app:showAsAction="ifRoom" />
+
+</menu>
