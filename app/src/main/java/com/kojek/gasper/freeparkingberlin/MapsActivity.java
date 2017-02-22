@@ -1,5 +1,7 @@
 package com.kojek.gasper.freeparkingberlin;
 
+import android.*;
+import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
@@ -15,6 +17,7 @@ import android.os.SystemClock;
 import android.support.annotation.NonNull;
 import android.support.design.widget.BottomSheetBehavior;
 import android.support.design.widget.FloatingActionButton;
+import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
@@ -44,11 +47,11 @@ import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.Polygon;
 import com.google.maps.android.PolyUtil;
-import com.google.maps.android.geojson.GeoJsonFeature;
-import com.google.maps.android.geojson.GeoJsonLayer;
-import com.google.maps.android.geojson.GeoJsonPoint;
-import com.google.maps.android.geojson.GeoJsonPolygon;
-import com.google.maps.android.geojson.GeoJsonPolygonStyle;
+
+import com.google.maps.android.data.Feature;
+import com.google.maps.android.data.geojson.GeoJsonFeature;
+import com.google.maps.android.data.geojson.GeoJsonLayer;
+import com.google.maps.android.data.geojson.GeoJsonPolygonStyle;
 import com.kojek.gasper.freeparkingberlin.util.StringSuggestion;
 
 import org.json.JSONException;
@@ -81,6 +84,9 @@ public class MapsActivity extends AppCompatActivity{
         super.onCreate(savedInstanceState);
         instance = this;
         setContentView(R.layout.activity_maps);
+
+        ActivityCompat.requestPermissions(this, new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION}, 1);
+        ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.INTERNET}, 2);
 
 //        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
 //        setSupportActionBar(toolbar);
@@ -182,14 +188,13 @@ public class MapsActivity extends AppCompatActivity{
                     zoneLayer.addLayerToMap();
                     zoneLayer.setOnFeatureClickListener(new GeoJsonLayer.GeoJsonOnFeatureClickListener() {
                         @Override
-                        public void onFeatureClick(GeoJsonFeature feature) {
+                        public void onFeatureClick(Feature feature) {
                             try {
                                 Log.d(TAG, "Zone clicked: " + feature.getProperty("zone"));
                                 dropMarker(feature);
                             } catch (Exception e) {
                                 Log.e(TAG, e.getLocalizedMessage());
                             }
-
                         }
                     });
                 } catch (IOException e) {
@@ -246,6 +251,7 @@ public class MapsActivity extends AppCompatActivity{
         floatingSearchView.setOnQueryChangeListener(new FloatingSearchView.OnQueryChangeListener() {
             @Override
             public void onSearchTextChanged(String oldQuery, String newQuery) {
+                Log.d(TAG, "onSearchTextChanged");
                 if (!oldQuery.equals("") && newQuery.equals("")) {
                     floatingSearchView.clearSuggestions();
                 } else {
@@ -366,7 +372,7 @@ public class MapsActivity extends AppCompatActivity{
         // TODO: find nearest address asynchronously
     }
 
-    private void dropMarker(GeoJsonFeature feature) throws Exception {
+    private void dropMarker(Feature feature) throws Exception {
         if (marker != null) marker.remove();
         marker = mMap.addMarker(new MarkerOptions()
                 .alpha(1)
@@ -399,7 +405,10 @@ public class MapsActivity extends AppCompatActivity{
 
     private void dropMarker(String address) {
         LatLng latLng = getLocationFromAddress(address);
-
+        if (latLng == null) {
+            Log.d(TAG, "dropMarker: getLocationFromAddress failed for " + address);
+            return;
+        }
         if (marker != null) marker.remove();
         marker = mMap.addMarker(new MarkerOptions()
                 .alpha(1)
